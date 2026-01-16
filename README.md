@@ -27,7 +27,7 @@ This project demonstrates backend fundamentals including CRUD operations, data v
 
 1. Clone the repository:
 ```bash
-git clone <your-repo-url>
+git clone <https://github.com/HaKh27/Restaurant-backend>
 cd restaurant-backend
 ```
 
