@@ -1,5 +1,7 @@
 from flask import Blueprint, jsonify, request
 from models import db, InventoryItem
+from models import db, Category
+
 
 # Blueprint groups all inventory-related routes together
 inventory_bp = Blueprint("inventory", __name__)
@@ -13,14 +15,19 @@ def get_inventory():
     min_quantity = request.args.get("min_quantity", type=int)
 
     query = InventoryItem.query
-    
+
     if min_quantity is not None:
         query = query.filter(InventoryItem.quantity >= min_quantity)
 
     items = query.all()
 
     return jsonify([
-        {"id": item.id, "name": item.name, "quantity": item.quantity}
+        {
+            "id": item.id, 
+            "name": item.name, 
+            "quantity": item.quantity,
+            "category": item.category.name if item.category else None
+        }
         for item in items
     ])
 
@@ -32,13 +39,26 @@ def add_inventory():
     """
     data = request.get_json()
 
-    # Prevent negative quantities
-    if data["quantity"] < 0:
-        return jsonify({"error": "Quantity cannot be negative"}), 400
+    name = data.get("name")
+    quantity = data.get("quantity")
+    category_id = data.get("category_id")
 
+    if not name or quantity is None:
+        return jsonify({"error": "Name and quantity are required"}), 400
+    
+    if quantity < 0:
+            return jsonify({"error": "Quantity cannot be negative"}), 400
+    
+    #Validate category if provided
+    if category_id is not None:  # don't need to specify category, if specified: must be valid  
+        category = Category.query.get(category_id)
+        if not category:
+            return jsonify({"error": "Category not found"}), 404
+        
     item = InventoryItem(
-        name=data["name"],
-        quantity=data["quantity"]
+        name = name,
+        quantity = quantity,
+        category_id = category_id
     )
 
     db.session.add(item)
@@ -50,7 +70,7 @@ def add_inventory():
 @inventory_bp.route("/api/inventory/<int:item_id>", methods=["PUT"])
 def update_inventory(item_id):
     """
-    Updates the name and/or quantity of an existing inventory item.
+    Updates the name, quantity, and/or category of an existing inventory item.
     """
     data = request.get_json()
     item = InventoryItem.query.get(item_id)
@@ -61,7 +81,7 @@ def update_inventory(item_id):
 
     updates = []
 
-    # Update quantity if provided and different
+    # Update quantity
     if "quantity" in data:
         if data["quantity"] < 0:
             return jsonify({"error": "Quantity cannot be negative"}), 400
@@ -69,20 +89,31 @@ def update_inventory(item_id):
             item.quantity = data["quantity"]
             updates.append("quantity")
 
-    # Update name if provided and different
+    # Update name
     if "name" in data:
         if data["name"] != item.name:
             item.name = data["name"]
             updates.append("name")
 
-    # If nothing actually changed
+    # Update category
+    if "category_id" in data:
+        category = Category.query.get(data["category_id"])
+        if not category:
+            return jsonify({"error": "Category not found"}), 404
+
+        if item.category_id != data["category_id"]:
+            item.category_id = data["category_id"]
+            updates.append("category")
+
+    # If nothing changed
     if not updates:
         return jsonify({"message": "No changes made"}), 200
 
     db.session.commit()
 
     message = " and ".join(updates).capitalize() + " updated"
-    return jsonify({"message": message})
+    return jsonify({"message": message}), 200
+
 
 
 @inventory_bp.route("/api/inventory/<int:item_id>", methods=["DELETE"])
@@ -99,3 +130,40 @@ def delete_inventory(item_id):
     db.session.commit()
 
     return jsonify({"message": "Item deleted"})
+
+@inventory_bp.route("/api/categories", methods=["POST"])
+def create_category():
+    """
+    Create a new category.
+    """
+    data = request.get_json()
+
+    # Basic validation
+    if not data or "name" not in data:
+        return jsonify({"error": "Category name is required"}), 400
+
+    name = data["name"]
+
+    # Check for duplicate category
+    existing = Category.query.filter_by(name=name).first()
+    if existing:
+        return jsonify({"error": "Category already exists"}), 400
+
+    category = Category(name=name)
+    db.session.add(category)
+    db.session.commit()
+
+    return jsonify({"message": "Category created"}), 201
+
+@inventory_bp.route("/api/categories", methods=["GET"])
+def get_categories():
+    categories = Category.query.all()
+
+    return jsonify([
+        {
+            "id": category.id,
+            "name": category.name
+        }
+        for category in categories
+    ])
+

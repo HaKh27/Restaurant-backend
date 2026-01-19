@@ -1,6 +1,8 @@
 from flask import Flask
 from models import db
 from routes import inventory_bp
+from models import Category, InventoryItem
+
 
 # Create Flask app
 app = Flask(__name__)
