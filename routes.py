@@ -10,7 +10,14 @@ def get_inventory():
     """
     Returns all inventory items.
     """
-    items = InventoryItem.query.all()
+    min_quantity = request.args.get("min_quantity", type=int)
+
+    query = InventoryItem.query
+    
+    if min_quantity is not None:
+        query = query.filter(InventoryItem.quantity >= min_quantity)
+
+    items = query.all()
 
     return jsonify([
         {"id": item.id, "name": item.name, "quantity": item.quantity}
