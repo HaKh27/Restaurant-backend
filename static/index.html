@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Restaurant Inventory</title>
+</head>
+<body>
+  <h1>Inventory by Category</h1>
+  <div id="categories"></div>
+
+  <script>
+    async function loadCategories() {
+      const response = await fetch("http://127.0.0.1:5001/api/categories");
+      const categories = await response.json();
+
+      const container = document.getElementById("categories");
+      container.innerHTML = "";
+
+      categories.forEach(category => {
+        const categoryDiv = document.createElement("div");
+        categoryDiv.innerHTML = `<h2>${category.name}</h2>`;
+
+        if (category.items.length === 0) {
+          categoryDiv.innerHTML += "<p>No items</p>";
+        } else {
+          const ul = document.createElement("ul");
+
+          category.items.forEach(item => {
+            const li = document.createElement("li");
+            li.textContent = `${item.name} (${item.quantity})`;
+            ul.appendChild(li);
+          });
+
+          categoryDiv.appendChild(ul);
+        }
+
+        container.appendChild(categoryDiv);
+      });
+    }
+
+    loadCategories();
+  </script>
+</body>
+</html>

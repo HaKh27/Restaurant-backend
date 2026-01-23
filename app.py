@@ -2,10 +2,14 @@ from flask import Flask
 from models import db
 from routes import inventory_bp
 from models import Category, InventoryItem
-
+from flask import send_from_directory
 
 # Create Flask app
 app = Flask(__name__)
+
+@app.route("/")
+def index():
+    return send_from_directory("static", "index.html")
 
 # Database configuration
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///restaurant.db"
