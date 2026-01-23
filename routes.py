@@ -69,13 +69,9 @@ def add_inventory():
 
 @inventory_bp.route("/api/inventory/<int:item_id>", methods=["PUT"])
 def update_inventory(item_id):
-    """
-    Updates the name, quantity, and/or category of an existing inventory item.
-    """
     data = request.get_json()
     item = InventoryItem.query.get(item_id)
 
-    # Check if item exists
     if not item:
         return jsonify({"error": "Item not found"}), 404
 
@@ -95,17 +91,26 @@ def update_inventory(item_id):
             item.name = data["name"]
             updates.append("name")
 
-    # Update category
+    # Update category (THIS IS THE IMPORTANT PART)
     if "category_id" in data:
-        category = Category.query.get(data["category_id"])
-        if not category:
-            return jsonify({"error": "Category not found"}), 404
+        incoming_category_id = data["category_id"]
 
-        if item.category_id != data["category_id"]:
-            item.category_id = data["category_id"]
-            updates.append("category")
+        # Remove category
+        if incoming_category_id is None:
+            if item.category_id is not None:
+                item.category_id = None
+                updates.append("category")
 
-    # If nothing changed
+        # Assign / change category
+        else:
+            category = Category.query.get(incoming_category_id)
+            if not category:
+                return jsonify({"error": "Category not found"}), 404
+
+            if item.category_id != incoming_category_id:
+                item.category_id = incoming_category_id
+                updates.append("category")
+
     if not updates:
         return jsonify({"message": "No changes made"}), 200
 
@@ -162,8 +167,61 @@ def get_categories():
     return jsonify([
         {
             "id": category.id,
-            "name": category.name
+            "name": category.name,
+            "items": [
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "quantity": item.quantity
+                }
+                for item in category.items
+            ]
         }
         for category in categories
     ])
+
+@inventory_bp.route("/api/categories/<int:category_id>", methods=["PUT"])
+def update_category(category_id):
+    data = request.get_json()
+
+    if not data or "name" not in data:
+        return jsonify({"error": "Category name is required"}), 400
+
+    category = Category.query.get(category_id)
+    if not category:
+        return jsonify({"error": "Category not found"}), 404
+
+    new_name = data["name"]
+
+    # Prevent duplicate category names
+    existing = Category.query.filter_by(name=new_name).first()
+    if existing and existing.id != category_id:
+        return jsonify({"error": "Category name already exists"}), 400
+
+    if category.name == new_name:
+        return jsonify({"message": "No changes made"}), 200
+
+    category.name = new_name
+    db.session.commit()
+
+    return jsonify({"message": "Category updated"}), 200
+
+
+@inventory_bp.route("/api/categories/<int:category_id>", methods=["DELETE"])
+def delete_category(category_id):
+    category = Category.query.get(category_id)
+
+    if not category:
+        return jsonify({"error": "Category not found"}), 404
+
+    # 🚨 Block deletion if category has items
+    if category.items:
+        return jsonify({
+            "error": "Cannot delete category with existing inventory items"
+        }), 400
+
+    db.session.delete(category)
+    db.session.commit()
+
+    return jsonify({"message": "Category deleted"}), 200
 
