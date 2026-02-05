@@ -6,9 +6,95 @@
 </head>
 <body>
   <h1>Inventory by Category</h1>
+
+  <h2>Add Inventory Item</h2>
+  <form id="add-item-form">
+    <input type="text" id="item-name" placeholder="Item name" required />
+    <input type="number" id="item-quantity" placeholder="Quantity" required />
+
+    <select id="item-category">
+      <option value="">No Category</option>
+    </select>
+
+    <input type="text" id="new-category" placeholder="Or create new category" />
+    <button type="submit">Add Item</button>
+  </form>
+
   <div id="categories"></div>
+  <button id="remove-selected">Remove Selected from Category</button>
 
   <script>
+    // Load categories for dropdown
+    async function loadCategoryOptions() {
+      const response = await fetch("http://127.0.0.1:5001/api/categories");
+      const categories = await response.json();
+
+      const select = document.getElementById("item-category");
+      select.innerHTML = '<option value="">No Category</option>';
+
+      categories.forEach(category => {
+        const option = document.createElement("option");
+        option.value = category.id;
+        option.textContent = category.name;
+        select.appendChild(option);
+      });
+    }
+
+    loadCategoryOptions();
+
+    // Add new inventory item
+    document.getElementById("add-item-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const name = document.getElementById("item-name").value;
+      const quantity = Number(document.getElementById("item-quantity").value);
+      const categoryValue = document.getElementById("item-category").value;
+      const newCategoryName = document.getElementById("new-category").value.trim();
+
+      let category_id = null;
+
+      // Create new category if provided
+      if (newCategoryName !== "") {
+        const res = await fetch("http://127.0.0.1:5001/api/categories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: newCategoryName })
+        });
+
+        if (!res.ok) {
+          alert("Failed to create category");
+          return;
+        }
+
+        const newCatRes = await fetch("http://127.0.0.1:5001/api/categories");
+        const categories = await newCatRes.json();
+        const newCategory = categories.find(c => c.name === newCategoryName);
+        category_id = newCategory.id;
+
+        loadCategoryOptions(); // refresh dropdown
+      } else if (categoryValue !== "") {
+        category_id = Number(categoryValue);
+      }
+
+      const payload = { name, quantity };
+      if (category_id) payload.category_id = category_id;
+
+      const response = await fetch("http://127.0.0.1:5001/api/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        alert("Failed to add item");
+        return;
+      }
+
+      e.target.reset();
+      loadCategories();
+    });
+
+    // Load categories and items
     async function loadCategories() {
       const response = await fetch("http://127.0.0.1:5001/api/categories");
       const categories = await response.json();
@@ -27,7 +113,32 @@
 
           category.items.forEach(item => {
             const li = document.createElement("li");
-            li.textContent = `${item.name} (${item.quantity})`;
+
+            li.innerHTML = `
+              <input type="checkbox" class="remove-checkbox" data-id="${item.id}" />
+              Name: <input type="text" value="${item.name}" id="name-${item.id}" />
+              Quantity: <input type="number" value="${item.quantity}" id="qty-${item.id}" />
+              <button id="save-${item.id}">Save</button>
+            `;
+
+            // Save button logic
+            li.querySelector(`#save-${item.id}`).addEventListener("click", async () => {
+              const updatedName = document.getElementById(`name-${item.id}`).value;
+              const updatedQty = Number(document.getElementById(`qty-${item.id}`).value);
+
+              const payload = { name: updatedName, quantity: updatedQty };
+
+              const res = await fetch(`http://127.0.0.1:5001/api/inventory/${item.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+              });
+
+              if (!res.ok) alert("Failed to update item");
+
+              loadCategories();
+            });
+
             ul.appendChild(li);
           });
 
@@ -37,6 +148,23 @@
         container.appendChild(categoryDiv);
       });
     }
+
+    // Remove selected items from category
+    document.getElementById("remove-selected").addEventListener("click", async () => {
+      const checkboxes = document.querySelectorAll(".remove-checkbox:checked");
+
+      for (let cb of checkboxes) {
+        const itemId = cb.dataset.id;
+
+        await fetch(`http://127.0.0.1:5001/api/inventory/${itemId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category_id: null })
+        });
+      }
+
+      loadCategories();
+    });
 
     loadCategories();
   </script>

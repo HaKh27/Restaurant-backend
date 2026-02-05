@@ -36,36 +36,49 @@ def get_inventory():
 def add_inventory():
     """
     Adds a new item to the inventory.
+    Can create a new category if `new_category` is provided.
     """
     data = request.get_json()
 
     name = data.get("name")
     quantity = data.get("quantity")
     category_id = data.get("category_id")
+    new_category_name = data.get("new_category")
 
     if not name or quantity is None:
         return jsonify({"error": "Name and quantity are required"}), 400
     
     if quantity < 0:
-            return jsonify({"error": "Quantity cannot be negative"}), 400
-    
-    #Validate category if provided
-    if category_id is not None:  # don't need to specify category, if specified: must be valid  
+        return jsonify({"error": "Quantity cannot be negative"}), 400
+
+    # Handle new category creation
+    if new_category_name:
+        existing_category = Category.query.filter_by(name=new_category_name).first()
+        if existing_category:
+            category_id = existing_category.id
+        else:
+            new_category = Category(name=new_category_name)
+            db.session.add(new_category)
+            db.session.commit()
+            category_id = new_category.id
+
+    # Validate existing category if provided
+    if category_id is not None:
         category = Category.query.get(category_id)
         if not category:
             return jsonify({"error": "Category not found"}), 404
-        
+
+    # Create the inventory item
     item = InventoryItem(
-        name = name,
-        quantity = quantity,
-        category_id = category_id
+        name=name,
+        quantity=quantity,
+        category_id=category_id
     )
 
     db.session.add(item)
     db.session.commit()
 
     return jsonify({"message": "Item added"}), 201
-
 
 @inventory_bp.route("/api/inventory/<int:item_id>", methods=["PUT"])
 def update_inventory(item_id):
